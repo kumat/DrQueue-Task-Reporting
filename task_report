@@ -1,0 +1,99 @@
+#!/usr/bin/env ruby
+
+unless ARGV.size >= 3
+  puts "Usage: task_report [-v] <task_list_csv_file> <output_file_type> <output_minimal_size>"
+  puts "\t-v: verbose, show detailed information."
+  puts "\ttask_list_csv_file: CSV file contains task informations."
+  puts "\toutput_file_type: the type of result file, jpeg, png, etc."
+  puts "\toutput_minimal_size: minimal size of the result file, in BYTEs."
+  puts "\te.g.: task_report /data/output ep56_render.csv png 1024"
+  exit
+end
+
+CONFIG_FILE = '/etc/drqueue_tools.config'
+
+unless File.exists? CONFIG_FILE and File.file? CONFIG_FILE 
+  puts "ERROR: #{CONFIG_FILE} doesn't exist!"
+  exit
+end
+
+verbose_mode = false
+verbose_token = ''
+
+if ARGV.include? '-v'
+  verbose_mode = true
+  verbose_token = '-v'  # for command /usr/bin/verify_result
+end
+
+csv_file = ARGV[ARGV.size - 3]
+output_file_type = ARGV[ARGV.size - 2]
+output_minimal_size = ARGV[ARGV.size - 1]
+
+output_path = ''
+mb_filename_csv_col = -1
+first_frame_csv_col = -1
+last_frame_csv_col = -1
+
+File.open(CONFIG_FILE, 'r') do |f|
+  f.each do |line|
+    a = line.strip.gsub(' ', '').split('=')
+    output_path = a[1] if a[0] == 'OUTPUT_PATH'
+    mb_filename_csv_col = a[1].to_i if a[0] == 'MB_FILENAME_CSV_COL'
+    first_frame_csv_col = a[1].to_i if a[0] == 'FIRST_FRAME_CSV_COL'
+    last_frame_csv_col = a[1].to_i if a[0] == 'LAST_FRAME_CSV_COL'
+  end
+end
+
+unless File.exists? output_path and File.directory? output_path
+  puts "ERROR: Output directory doesn't exist!"
+  exit
+end
+
+unless File.exists? csv_file and File.file? csv_file
+  puts "ERROR: #{csv_file} doesn't exist, or not a file!"
+  exit
+end
+
+tasks = {}
+
+File.open(csv_file, 'r') do |f|
+  f.read.split("\r").each do |line|
+    begin
+      puts "Processing: #{line}" if verbose_mode
+      a = line.strip.split(',')
+      if a[mb_filename_csv_col]
+        fn = a[mb_filename_csv_col].split('.')
+        if fn[fn.size - 1] == 'mb'
+          puts "Intepreting: #{line}" if verbose_mode
+          index = a[mb_filename_csv_col].gsub(/\.mb$/, '')
+          tasks[index] = {:first_frame => a[first_frame_csv_col], :last_frame => a[last_frame_csv_col]}
+        end
+      end
+    rescue Exception => e
+      puts "ERROR: #{e}"
+      puts "Most possibly, the format of csv file is incorrect!"
+      puts "It should be like this:"
+      puts "\txxxxxx.mb,chbg"
+      exit
+    end
+  end
+end
+
+output_path += '/' if output_path[-1,1] != '/'
+
+Dir.entries(output_path).each do |f|
+  task_path = output_path + f
+  print "Verifying #{task_path}..." if verbose_mode
+  begin
+    if File.directory? task_path and tasks.keys.include? f
+      80.times {|i| print '-' }
+      puts "\nAnalysing #{f}"
+      system("verify_result #{verbose_token} #{task_path} #{output_file_type} #{output_minimal_size} #{tasks[f][:first_frame]} #{tasks[f][:last_frame]}")
+    else
+      puts "is not a task output directory, skipped." if verbose_mode
+    end
+  rescue Exception => e
+    puts "ERROR: #{e}"
+    exit
+  end
+end

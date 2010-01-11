@@ -1,0 +1,80 @@
+#!/usr/bin/env ruby
+
+unless ARGV.size >= 5
+  puts "Usage: verify_task_result [-v] <task_directory> <file_type> <minimal_size> <first_frame> <last_frame>"
+  puts "\t-v: verbose, show detailed information."
+  puts "\tfile_type: \"JPEG image\", \"PNG image\", \"ASCII English text\", etc."
+  puts "\tminimal_size: minimal file size of the result file, in BYTEs."
+  puts "\tfirst_frame, last_frame: important information, used to indicate how many files."
+  puts "\te.g.: verify_task_result /data/s01/c01-50 \"JPEG image\" 128000 1 100"
+  exit
+end
+
+verbose_mode = ARGV.include? '-v'
+
+src_path = ARGV[ARGV.size - 5]
+puts "Source Path: #{src_path}" if verbose_mode
+
+file_type = ARGV[ARGV.size - 4].upcase
+minimal_size = ARGV[ARGV.size - 3].to_i
+first_frame = ARGV[ARGV.size - 2].to_i
+last_frame = ARGV[ARGV.size - 1].to_i
+
+unless File.exists? src_path and File.directory? src_path
+  puts "ERROR: Source directory doesn't exist!"
+  exit
+end
+
+unless minimal_size > 0
+  puts "ERROR: Expected minimal size of single result file is 0, please give at least 1."
+  exit
+end
+
+file_qty = last_frame - first_frame + 1
+
+unless file_qty > 0
+  puts "WARNING: Expected qty of files is 0, Nothing to be verified, bye."
+  exit
+end
+
+frame_set = []
+(first_frame..last_frame).collect {|x| frame_set << x}
+
+count = 0
+src_path += '/' if src_path[-1,1] != '/'
+
+Dir.entries(src_path).each do |f|
+  src_file = src_path + f
+  print "Verifying #{src_file}..." if verbose_mode
+  begin
+    if File.file? src_file
+      print "is a file..." if verbose_mode
+      IO.popen("file #{src_file}", "r") do |p|
+        buf = p.read
+        puts "#{buf.strip}" if verbose_mode
+        if buf.include? "#{file_type}" and File.size(src_file) >= minimal_size
+          count += 1
+          puts "matched!" if verbose_mode
+          a = f.split('.')
+          frame_set.delete a[ a.size - 2 ].to_i
+        else
+          puts "skipped." if verbose_mode
+        end
+      end
+    else
+      puts "is not a file, skipped." if verbose_mode
+    end
+  rescue Exception => e
+    puts "ERROR: #{e}"
+    exit
+  end
+end
+
+puts "#{count} file#{count > 0 ? 's' : ''} verified in total"
+if count == file_qty
+  puts "Success!"
+else
+  puts "Failed! Expected #{file_qty}, but actual matched #{count}"
+  failed_frames = frame_set.inject {|x, y| "#{x}, #{y}"}
+  puts "Failed frames: #{failed_frames}"
+end
