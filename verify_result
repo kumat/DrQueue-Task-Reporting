@@ -10,10 +10,10 @@ unless ARGV.size >= 5
   exit
 end
 
-verbose_mode = ARGV.include? '-v'
+VERBOSE_MODE = ARGV.include? '-v'
 
 def verbose_print(message)
-  print message if verbose_mode
+  print message if VERBOSE_MODE
 end
 
 src_path = ARGV[ARGV.size - 5]
