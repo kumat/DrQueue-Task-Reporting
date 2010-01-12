@@ -81,13 +81,12 @@ end
 
 output_path += '/' if output_path[-1,1] != '/'
 
-Dir.entries(output_path).each do |f|
+Dir.entries(output_path).sort.each do |f|
   task_path = output_path + f
   print "Verifying #{task_path}..." if verbose_mode
   begin
     if File.directory? task_path and tasks.keys.include? f
-      80.times {|i| print '-' }
-      puts "\nAnalysing #{f}" if verbose_mode
+      print "#{f}: "
       system("verify_result #{verbose_token} #{task_path} #{output_file_type} #{output_minimal_size} #{tasks[f][:first_frame]} #{tasks[f][:last_frame]}")
     else
       puts "is not a task output directory, skipped." if verbose_mode

@@ -66,7 +66,7 @@ Dir.entries(src_path).each do |f|
         end
       end
     else
-      verbose_print "is not a file, skipped."
+      verbose_print "is not a file, skipped.\n"
     end
   rescue Exception => e
     puts "ERROR: #{e}"
