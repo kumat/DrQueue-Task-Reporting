@@ -87,7 +87,7 @@ Dir.entries(output_path).each do |f|
   begin
     if File.directory? task_path and tasks.keys.include? f
       80.times {|i| print '-' }
-      puts "\nAnalysing #{f}"
+      puts "\nAnalysing #{f}" if verbose_mode
       system("verify_result #{verbose_token} #{task_path} #{output_file_type} #{output_minimal_size} #{tasks[f][:first_frame]} #{tasks[f][:last_frame]}")
     else
       puts "is not a task output directory, skipped." if verbose_mode

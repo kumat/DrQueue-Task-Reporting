@@ -12,8 +12,12 @@ end
 
 verbose_mode = ARGV.include? '-v'
 
+def verbose_print(message)
+  print message if verbose_mode
+end
+
 src_path = ARGV[ARGV.size - 5]
-puts "Source Path: #{src_path}" if verbose_mode
+verbose_print "Source Path: #{src_path}"
 
 file_type = ARGV[ARGV.size - 4].upcase
 minimal_size = ARGV[ARGV.size - 3].to_i
@@ -45,24 +49,24 @@ src_path += '/' if src_path[-1,1] != '/'
 
 Dir.entries(src_path).each do |f|
   src_file = src_path + f
-  print "Verifying #{src_file}..." if verbose_mode
+  verbose_print "Verifying #{src_file}..."
   begin
     if File.file? src_file
-      print "is a file..." if verbose_mode
+      verbose_print "is a..."
       IO.popen("file #{src_file}", "r") do |p|
         buf = p.read
-        puts "#{buf.strip}" if verbose_mode
+        verbose_print "#{buf.strip}\n"
         if buf.include? "#{file_type}" and File.size(src_file) >= minimal_size
           count += 1
-          puts "matched!" if verbose_mode
+          verbose_print "matched!\n"
           a = f.split('.')
           frame_set.delete a[ a.size - 2 ].to_i
         else
-          puts "skipped." if verbose_mode
+          verbose_print "skipped.\n"
         end
       end
     else
-      puts "is not a file, skipped." if verbose_mode
+      verbose_print "is not a file, skipped."
     end
   rescue Exception => e
     puts "ERROR: #{e}"
@@ -70,11 +74,11 @@ Dir.entries(src_path).each do |f|
   end
 end
 
-puts "#{count} file#{count > 0 ? 's' : ''} verified in total"
+print "#{count} file#{count > 0 ? 's' : ''} verified in total with "
 if count == file_qty
   puts "Success!"
 else
-  puts "Failed! Expected #{file_qty}, but actual matched #{count}"
+  print "Failure! Expected #{file_qty}, but actual matched #{count}. "
   failed_frames = frame_set.inject {|x, y| "#{x}, #{y}"}
   puts "Failed frames: #{failed_frames}"
 end
