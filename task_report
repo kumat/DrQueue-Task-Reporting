@@ -57,7 +57,7 @@ end
 tasks = {}
 
 File.open(csv_file, 'r') do |f|
-  f.read.split("\r").each do |line|
+  f.read.gsub("\r", "\n").split("\n").each do |line|
     begin
       puts "Processing: #{line}" if verbose_mode
       a = line.strip.split(',')
@@ -81,11 +81,14 @@ end
 
 output_path += '/' if output_path[-1,1] != '/'
 
+handled = {}
+
 Dir.entries(output_path).sort.each do |f|
   task_path = output_path + f
   print "Verifying #{task_path}..." if verbose_mode
   begin
     if File.directory? task_path and tasks.keys.include? f
+      handled[f] = 1
       print "#{f}: "
       system("verify_result #{verbose_token} #{task_path} #{output_file_type} #{output_minimal_size} #{tasks[f][:first_frame]} #{tasks[f][:last_frame]}")
     else
@@ -95,4 +98,16 @@ Dir.entries(output_path).sort.each do |f|
     puts "ERROR: #{e}"
     exit
   end
+end
+
+handled.keys.each do |key|
+  tasks.delete key
+end
+
+80.times {|i| print '-'}
+
+puts "\nNo directories found for below list:"
+
+tasks.keys.each do |key|
+  puts key
 end
