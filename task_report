@@ -1,50 +1,106 @@
 #!/usr/bin/env ruby
 
-unless ARGV.size >= 3
-  puts "Usage: task_report [-v] <task_list_csv_file> <output_file_type> <output_minimal_size>"
-  puts "\t-v: verbose, show detailed information."
-  puts "\ttask_list_csv_file: CSV file contains task informations."
-  puts "\toutput_file_type: the type of result file, jpeg, png, etc."
-  puts "\toutput_minimal_size: minimal size of the result file, in BYTEs."
-  puts "\te.g.: task_report /data/output ep56_render.csv png 1024"
+require 'optparse'
+
+def parse_file_size(s)
+  case s[-2, 2]
+    when 'KB'
+      (s[0, s.size-2].to_f * 1024).round
+    when 'MB'
+      (s[0, s.size-2].to_f * 1024 * 1024).round
+    when 'GB'
+      (s[0, s.size-2].to_f * 1024 * 1024 * 1024).round
+    else
+      return s.to_f.round
+  end
+end
+
+def print_help_and_exit(opts)
+  puts opts
+  puts "Example: task_report -o /data/output -t png -s 2KB ep56.csv"
   exit
 end
 
-CONFIG_FILE = '/etc/drqueue_tools.config'
+options = {}
 
-unless File.exists? CONFIG_FILE and File.file? CONFIG_FILE 
-  puts "ERROR: #{CONFIG_FILE} doesn't exist!"
+opt_parser = OptionParser.new do |opts|
+  opts.banner = 'Usage: task_report [options] csv_file'
+
+  options[:verbose] = false
+  opts.on('-v', '--verbose', 'Output more information') do
+    options[:verbose] = true
+    options[:verbose_token] = '-v'
+  end
+
+  options[:config_file] = '/etc/drqueue_tools.config'
+  opts.on('-c', '--config_file FILE', 'Config file, Default: /etc/drqueue_tools.config') do |file|
+    options[:config_file] = file
+  end
+
+  options[:output_path] = nil
+  opts.on('-o', '--output_path PATH', 'Where the output files stored.') do |path|
+    options[:output_path] = path
+  end
+
+  options[:output_file_type] = nil
+  opts.on('-t', '--output_file_type TYPE', 'File types: jpeg, png, tiff, etc.') do |type|
+    options[:output_file_type] = type
+  end
+
+  options[:output_minimal_size] = 1024
+  opts.on('-s', '--output_minimal_size SIZE', 'File size(default 1KB):1024, 2KB, 4.5MB, etc.') do |size|
+    options[:output_minimal_size] = parse_file_size(size)
+  end
+
+  opts.on('-h', '--help', 'Display this screen') do
+    print_help_and_exit(opts)
+  end
+end
+
+opt_parser.parse!
+
+if options[:verbose]
+  puts "Config File: #{options[:config_file]}"
+  puts "Output Path: #{options[:output_path]}"
+  puts "File Type: #{options[:output_file_type]}"
+  puts "Minimal Size: #{options[:output_minimal_size]}"
+end
+
+# Parsing Config File to get definitions for verifying output files
+# Parsing Config File --begin--
+
+unless File.exists? options[:config_file] and File.file? options[:config_file] 
+  puts "ERROR: #{options[:config_file]} doesn't exist!"
   exit
 end
 
-verbose_mode = false
-verbose_token = ''
-
-if ARGV.include? '-v'
-  verbose_mode = true
-  verbose_token = '-v'  # for command /usr/bin/verify_result
-end
-
-csv_file = ARGV[ARGV.size - 3]
-output_file_type = ARGV[ARGV.size - 2]
-output_minimal_size = ARGV[ARGV.size - 1]
-
-output_path = ''
+options[:output_path] = ''
 mb_filename_csv_col = -1
 first_frame_csv_col = -1
 last_frame_csv_col = -1
 
-File.open(CONFIG_FILE, 'r') do |f|
+File.open(options[:config_file], 'r') do |f|
   f.each do |line|
     a = line.strip.gsub(' ', '').split('=')
-    output_path = a[1] if a[0] == 'OUTPUT_PATH'
+    options[:output_path] = a[1] if a[0] == 'OUTPUT_PATH'
     mb_filename_csv_col = a[1].to_i if a[0] == 'MB_FILENAME_CSV_COL'
     first_frame_csv_col = a[1].to_i if a[0] == 'FIRST_FRAME_CSV_COL'
     last_frame_csv_col = a[1].to_i if a[0] == 'LAST_FRAME_CSV_COL'
   end
 end
+# Parsing Config File --end--
 
-unless File.exists? output_path and File.directory? output_path
+print_help_and_exit(opt_parser) if options.values.include? nil 
+
+# Test
+ARGV.each do |csv_file|
+  puts "Handling #{csv_file}..."
+  sleep 0.5
+end
+exit
+
+
+unless File.exists? options[:output_path] and File.directory? options[:output_path]
   puts "ERROR: Output directory doesn't exist!"
   exit
 end
@@ -59,12 +115,12 @@ tasks = {}
 File.open(csv_file, 'r') do |f|
   f.read.gsub("\r", "\n").split("\n").each do |line|
     begin
-      puts "Processing: #{line}" if verbose_mode
+      puts "Processing: #{line}" if options[:verbose]
       a = line.strip.split(',')
       if a[mb_filename_csv_col]
         fn = a[mb_filename_csv_col].split('.')
         if fn[fn.size - 1] == 'mb'
-          puts "Intepreting: #{line}" if verbose_mode
+          puts "Intepreting: #{line}" if options[:verbose]
           index = a[mb_filename_csv_col].gsub(/\.mb$/, '')
           tasks[index] = {:first_frame => a[first_frame_csv_col], :last_frame => a[last_frame_csv_col]}
         end
@@ -79,20 +135,20 @@ File.open(csv_file, 'r') do |f|
   end
 end
 
-output_path += '/' if output_path[-1,1] != '/'
+options[:output_path] += '/' if options[:output_path][-1,1] != '/'
 
 handled = {}
 
-Dir.entries(output_path).sort.each do |f|
-  task_path = output_path + f
-  print "Verifying #{task_path}..." if verbose_mode
+Dir.entries(options[:output_path]).sort.each do |f|
+  task_path = options[:output_path] + f
+  print "Verifying #{task_path}..." if options[:verbose]
   begin
     if File.directory? task_path and tasks.keys.include? f
       handled[f] = 1
       print "#{f}: "
-      system("verify_result #{verbose_token} #{task_path} #{output_file_type} #{output_minimal_size} #{tasks[f][:first_frame]} #{tasks[f][:last_frame]}")
+      system("verify_result #{options[:verbose_token]} #{task_path} #{options[:output_file_type]} #{options[:output_minimal_size]} #{tasks[f][:first_frame]} #{tasks[f][:last_frame]}")
     else
-      puts "is not a task output directory, skipped." if verbose_mode
+      puts "is not a task output directory, skipped." if options[:verbose]
     end
   rescue Exception => e
     puts "ERROR: #{e}"
