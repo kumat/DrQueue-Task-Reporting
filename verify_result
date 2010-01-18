@@ -53,7 +53,7 @@ Dir.entries(src_path).each do |f|
   begin
     if File.file? src_file
       verbose_print "is a..."
-      IO.popen("file #{src_file}", "r") do |p|
+      IO.popen("file \"#{src_file}\"", "r") do |p|
         buf = p.read
         verbose_print "#{buf.strip}\n"
         if buf.include? "#{file_type}" and File.size(src_file) >= minimal_size

@@ -21,6 +21,11 @@ def print_help_and_exit(opts)
   exit
 end
 
+def generate_task_entry(hash, layer, first_frame, last_frame)
+  index =  layer >= 0 ? hash[layer] : '.'
+  {index => {:first_frame => hash[first_frame], :last_frame => hash[last_frame]}}
+end
+
 options = {}
 
 opt_parser = OptionParser.new do |opts|
@@ -59,13 +64,6 @@ end
 
 opt_parser.parse!
 
-if options[:verbose]
-  puts "Config File: #{options[:config_file]}"
-  puts "Output Path: #{options[:output_path]}"
-  puts "File Type: #{options[:output_file_type]}"
-  puts "Minimal Size: #{options[:output_minimal_size]}"
-end
-
 # Parsing Config File to get definitions for verifying output files
 # Parsing Config File --begin--
 
@@ -74,96 +72,126 @@ unless File.exists? options[:config_file] and File.file? options[:config_file]
   exit
 end
 
-options[:output_path] = ''
 mb_filename_csv_col = -1
 first_frame_csv_col = -1
 last_frame_csv_col = -1
+layer_csv_col = -1
 
 File.open(options[:config_file], 'r') do |f|
   f.each do |line|
     a = line.strip.gsub(' ', '').split('=')
-    options[:output_path] = a[1] if a[0] == 'OUTPUT_PATH'
+    options[:output_path] ||= a[1] if a[0] == 'OUTPUT_PATH'
     mb_filename_csv_col = a[1].to_i if a[0] == 'MB_FILENAME_CSV_COL'
+    layer_csv_col = a[1].to_i if a[0] == 'LAYER_CSV_COL'
     first_frame_csv_col = a[1].to_i if a[0] == 'FIRST_FRAME_CSV_COL'
     last_frame_csv_col = a[1].to_i if a[0] == 'LAST_FRAME_CSV_COL'
   end
 end
 # Parsing Config File --end--
 
-print_help_and_exit(opt_parser) if options.values.include? nil 
-
-# Test
-ARGV.each do |csv_file|
-  puts "Handling #{csv_file}..."
-  sleep 0.5
+if options[:verbose]
+  puts "Config File: #{options[:config_file]}"
+  puts "Output Path: #{options[:output_path]}"
+  puts "File Type: #{options[:output_file_type]}"
+  puts "Minimal Size: #{options[:output_minimal_size]}"
 end
-exit
 
+print_help_and_exit(opt_parser) if options.values.include? nil 
 
 unless File.exists? options[:output_path] and File.directory? options[:output_path]
   puts "ERROR: Output directory doesn't exist!"
   exit
 end
 
-unless File.exists? csv_file and File.file? csv_file
-  puts "ERROR: #{csv_file} doesn't exist, or not a file!"
-  exit
-end
+ARGV.each do |csv_file|
+  80.times {|i| print '='}
+  puts "\nHandling #{csv_file}..."
 
-tasks = {}
+  unless File.exists? csv_file and File.file? csv_file
+    puts "ERROR: #{csv_file} doesn't exist, or not a file!"
+    next
+  end
 
-File.open(csv_file, 'r') do |f|
-  f.read.gsub("\r", "\n").split("\n").each do |line|
-    begin
-      puts "Processing: #{line}" if options[:verbose]
-      a = line.strip.split(',')
-      if a[mb_filename_csv_col]
-        fn = a[mb_filename_csv_col].split('.')
-        if fn[fn.size - 1] == 'mb'
-          puts "Intepreting: #{line}" if options[:verbose]
-          index = a[mb_filename_csv_col].gsub(/\.mb$/, '')
-          tasks[index] = {:first_frame => a[first_frame_csv_col], :last_frame => a[last_frame_csv_col]}
+  tasks = {}
+
+  File.open(csv_file, 'r') do |f|
+    new_entry = 'no'
+    index = ''
+    f.read.gsub("\r", "\n").split("\n").each do |line|
+      begin
+        puts "Processing: #{line}" if options[:verbose]
+        a = line.strip.split(',')
+        if a[mb_filename_csv_col].size > 0 and a[last_frame_csv_col].to_i > 0
+          fn = a[mb_filename_csv_col].split('.')
+          if fn[fn.size - 1] == 'mb'
+            puts "Intepreting: #{line}" if options[:verbose]
+            index = a[mb_filename_csv_col].gsub(/\.mb$/, '')
+            tasks[index] = {}
+            generate_task_entry(a, layer_csv_col, first_frame_csv_col, last_frame_csv_col).each {|k,v| tasks[index][k] = v}
+            new_entry = index
+          end
+        else
+          if new_entry == index and a[last_frame_csv_col].to_i > 0
+            generate_task_entry(a, layer_csv_col, first_frame_csv_col, last_frame_csv_col).each {|k,v| tasks[index][k] = v}
+          end
         end
+      rescue Exception => e
+        puts "ERROR: #{e}"
+        puts "Most possibly, the format of csv file is incorrect!"
+        puts "It should be like this:"
+        puts "\txxxxxx.mb,chbg"
+        exit
+      end
+    end
+  end
+
+  options[:output_path] += '/' if options[:output_path][-1,1] != '/'
+
+  handled = {}
+
+  Dir.entries(options[:output_path]).sort.each do |f|
+    task_path = options[:output_path] + f
+    print "Verifying #{task_path}..." if options[:verbose]
+    begin
+      if File.directory? task_path and tasks.keys.include? f
+        handled[f] ||= []
+        tasks[f].keys.each do |layer|
+          task_layer_path = task_path + '/' + layer
+          if File.directory? task_layer_path
+            handled[f] << layer
+            print "#{task_layer_path}: "
+            system("verify_result #{options[:verbose_token]} #{task_layer_path} #{options[:output_file_type]} #{options[:output_minimal_size]} #{tasks[f][layer][:first_frame]} #{tasks[f][layer][:last_frame]}")
+          else
+            puts "is not a task layer output directory, skipped." if options[:verbose]
+          end
+        end
+      else
+        puts "is not a task output directory, skipped." if options[:verbose]
       end
     rescue Exception => e
       puts "ERROR: #{e}"
-      puts "Most possibly, the format of csv file is incorrect!"
-      puts "It should be like this:"
-      puts "\txxxxxx.mb,chbg"
       exit
     end
   end
-end
 
-options[:output_path] += '/' if options[:output_path][-1,1] != '/'
-
-handled = {}
-
-Dir.entries(options[:output_path]).sort.each do |f|
-  task_path = options[:output_path] + f
-  print "Verifying #{task_path}..." if options[:verbose]
-  begin
-    if File.directory? task_path and tasks.keys.include? f
-      handled[f] = 1
-      print "#{f}: "
-      system("verify_result #{options[:verbose_token]} #{task_path} #{options[:output_file_type]} #{options[:output_minimal_size]} #{tasks[f][:first_frame]} #{tasks[f][:last_frame]}")
-    else
-      puts "is not a task output directory, skipped." if options[:verbose]
+  handled.keys.each do |key|
+    handled[key].each do |layer|
+      tasks[key].delete layer
     end
-  rescue Exception => e
-    puts "ERROR: #{e}"
-    exit
+    tasks.delete key if tasks[key].size == 0
   end
+
+  80.times {|i| print '-'}
+
+  puts "\nNo directories found for below list:"
+
+  tasks.keys.each do |key|
+    tasks[key].keys.each do |layer|
+      puts "#{key}/#{layer}"
+    end
+  end
+
 end
 
-handled.keys.each do |key|
-  tasks.delete key
-end
 
-80.times {|i| print '-'}
 
-puts "\nNo directories found for below list:"
-
-tasks.keys.each do |key|
-  puts key
-end
