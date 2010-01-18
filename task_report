@@ -29,7 +29,7 @@ end
 options = {}
 
 opt_parser = OptionParser.new do |opts|
-  opts.banner = 'Usage: task_report [options] csv_file'
+  opts.banner = 'Usage: task_report [options] csv_file csv_file ...'
 
   options[:verbose] = false
   opts.on('-v', '--verbose', 'Output more information') do
