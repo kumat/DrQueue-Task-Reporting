@@ -26,6 +26,8 @@ def generate_task_entry(hash, layer, first_frame, last_frame)
   {index => {:first_frame => hash[first_frame], :last_frame => hash[last_frame]}}
 end
 
+time_start = Time.now
+
 options = {}
 
 opt_parser = OptionParser.new do |opts|
@@ -193,5 +195,5 @@ ARGV.each do |csv_file|
 
 end
 
-
+STDERR.puts "#{Time.now - time_start} seconds passed."
 
