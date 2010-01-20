@@ -23,6 +23,7 @@ end
 
 def generate_task_entry(hash, layer, first_frame, last_frame)
   index =  layer >= 0 ? hash[layer] : '.'
+  STDERR.puts "-> Layer: #{index}"
   {index => {:first_frame => hash[first_frame], :last_frame => hash[last_frame]}}
 end
 
@@ -36,7 +37,8 @@ opt_parser = OptionParser.new do |opts|
   options[:verbose] = false
   opts.on('-v', '--verbose', 'Output more information') do
     options[:verbose] = true
-    options[:verbose_token] = '-v'
+    #options[:verbose_token] = '-v'
+    options[:verbose_token] = ''
   end
 
   options[:config_file] = '/etc/drqueue_tools.config'
@@ -92,10 +94,10 @@ end
 # Parsing Config File --end--
 
 if options[:verbose]
-  puts "Config File: #{options[:config_file]}"
-  puts "Output Path: #{options[:output_path]}"
-  puts "File Type: #{options[:output_file_type]}"
-  puts "Minimal Size: #{options[:output_minimal_size]}"
+  STDERR.puts "Config File: #{options[:config_file]}"
+  STDERR.puts "Output Path: #{options[:output_path]}"
+  STDERR.puts "File Type: #{options[:output_file_type]}"
+  STDERR.puts "Minimal Size: #{options[:output_minimal_size]}"
 end
 
 print_help_and_exit(opt_parser) if options.values.include? nil 
@@ -121,19 +123,20 @@ ARGV.each do |csv_file|
     index = ''
     f.read.gsub("\r", "\n").split("\n").each do |line|
       begin
-        puts "Processing: #{line}" if options[:verbose]
+        STDERR.puts "Processing: #{line}" if options[:verbose]
         a = line.strip.split(',')
         if a[mb_filename_csv_col].size > 0 and a[last_frame_csv_col].to_i > 0
           fn = a[mb_filename_csv_col].split('.')
           if fn[fn.size - 1] == 'mb'
-            puts "Intepreting: #{line}" if options[:verbose]
             index = a[mb_filename_csv_col].gsub(/\.mb$/, '')
             tasks[index] = {}
+            STDERR.print "- New task: #{index}" if options[:verbose]
             generate_task_entry(a, layer_csv_col, first_frame_csv_col, last_frame_csv_col).each {|k,v| tasks[index][k] = v}
             new_entry = index
           end
         else
           if new_entry == index and a[last_frame_csv_col].to_i > 0
+            STDERR.print "- For task: #{index}" if options[:verbose]
             generate_task_entry(a, layer_csv_col, first_frame_csv_col, last_frame_csv_col).each {|k,v| tasks[index][k] = v}
           end
         end
@@ -153,22 +156,23 @@ ARGV.each do |csv_file|
 
   Dir.entries(options[:output_path]).sort.each do |f|
     task_path = options[:output_path] + f
-    print "Verifying #{task_path}..." if options[:verbose]
+    STDERR.puts "Verifying #{task_path}..." if options[:verbose]
     begin
       if File.directory? task_path and tasks.keys.include? f
         handled[f] ||= []
         tasks[f].keys.each do |layer|
           task_layer_path = task_path + '/' + layer
           if File.directory? task_layer_path
+            STDERR.puts "- Processing #{task_layer_path}..." if options[:verbose]
             handled[f] << layer
             print "#{task_layer_path}: "
             system("verify_result #{options[:verbose_token]} #{task_layer_path} #{options[:output_file_type]} #{options[:output_minimal_size]} #{tasks[f][layer][:first_frame]} #{tasks[f][layer][:last_frame]}")
           else
-            puts "is not a task layer output directory, skipped." if options[:verbose]
+            STDERR.puts "- #{task_layer_path} is not a valid directory, skipped." if options[:verbose]
           end
         end
       else
-        puts "is not a task output directory, skipped." if options[:verbose]
+        STDERR.puts "- #{task_path} is not a valid directory or not in the task list, skipped." if options[:verbose]
       end
     rescue Exception => e
       puts "ERROR: #{e}"
