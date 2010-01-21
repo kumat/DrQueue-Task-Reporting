@@ -1,0 +1,73 @@
+#!/usr/bin/env ruby
+require 'gtk2'
+
+# It is imperative to understand what is happening in "folder_changed"
+# First note, that both "folder" (dir) and "file" buttons are passed
+# into the method. This is because that we want the two buttons to
+# be related. The first "folder" button should provide the directory
+# from which the second button should by default pick a file.
+
+def  folder_changed(c_dir, c_file)
+  dir = c_dir.filename
+  c_file.current_folder = dir
+end
+
+def file_changed(c_file, lab)
+  file = c_file.filename
+  file = "" if file == nil
+  lab.text = file
+end
+window = Gtk::Window.new(Gtk::Window::TOPLEVEL)
+window.set_title  "File Chooser Buttons"
+window.border_width = 10
+window.signal_connect('delete_event') { Gtk.main_quit }
+
+label = Gtk::Label.new
+chooser_dir  = Gtk::FileChooserButton.new(
+    "Choose a Folder", Gtk::FileChooser::ACTION_SELECT_FOLDER)
+chooser_file = Gtk::FileChooserButton.new(
+    "Choose a File", Gtk::FileChooser::ACTION_OPEN)
+
+### IGNORE THIS I HAD TO PUT THIS IN SO THE CODE WOULD WORK AND MY INPUT WOULD NOT BE SPAM!!!
+### THE OLNY REASON THIS IS IN HERE IS BECAUSE THE CODE WOULD FAIL BECAUSE ABOVE AN 'r' WAS MISSING
+### IT WAS chooser_file = Gtk::FileChooserButton.new("Choose a File", Gtk::FileChooser::ACTION_OPEN)
+
+# Let's add an extra widget (a button) to the {{ dialog }}
+extra_button = Gtk::Button.new("Extra button")
+extra_button.signal_connect("clicked") do
+  puts "extra button is clicked"
+end
+chooser_dir.signal_connect('selection_changed') do |w|
+  # {{ w }} = {{ FileChooserDialog }}
+  w.extra_widget = extra_button
+  folder_changed(w, chooser_file)
+end
+chooser_file.signal_connect('selection_changed') do |w|
+  file_changed(chooser_file, label)
+end
+chooser_dir.current_folder  = GLib.home_dir
+# chooser_file.current_folder = "/tmp"  # <--- will have no effect, since callback overrides it 
+# chooser_file.filename = "/home/iwk/wk/a_cfile.c" # <--- would work if file existed
+
+filter1 = Gtk::FileFilter.new
+filter2 = Gtk::FileFilter.new
+
+filter1.name = "Image Files"
+filter2.name = "All Files"
+
+filter1.add_pattern('*.png')
+filter1.add_pattern('*.jpg')
+filter1.add_pattern('*.gif')
+filter2.add_pattern('*')
+
+chooser_file.add_filter(filter1)
+chooser_file.add_filter(filter2)
+
+vbox = Gtk::VBox.new(true, 5)
+vbox.pack_start_defaults(chooser_dir)
+vbox.pack_start_defaults(chooser_file)
+vbox.pack_start_defaults(label)
+
+window.add(vbox)
+window.show_all
+Gtk.main
