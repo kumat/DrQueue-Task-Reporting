@@ -1,73 +1,139 @@
 #!/usr/bin/env ruby
 require 'gtk2'
 
-# It is imperative to understand what is happening in "folder_changed"
-# First note, that both "folder" (dir) and "file" buttons are passed
-# into the method. This is because that we want the two buttons to
-# be related. The first "folder" button should provide the directory
-# from which the second button should by default pick a file.
+CMD_TEMPLATE = 'task_report2 -o <output_dir> -t <file_type> -s <file_size> <csv_file>'
 
-def  folder_changed(c_dir, c_file)
-  dir = c_dir.filename
-  c_file.current_folder = dir
+class CommandLine
+  attr_accessor :output_dir, :csv_file, :file_type, :file_size
+
+  def initialize
+    @output_dir = '<not assigned>'
+    @csv_file = '<not assigned>'
+    @file_size = 1.0
+    @file_type = '<not assigned>'
+  end
+
+  def getCommand
+    CMD_TEMPLATE.gsub('<output_dir>', @output_dir).gsub('<csv_file>', @csv_file).gsub('<file_type>', @file_type).gsub('<file_size>', @file_size.to_s + 'KB')
+  end
 end
 
-def file_changed(c_file, lab)
-  file = c_file.filename
-  file = "" if file == nil
-  lab.text = file
+def get_cmdstr(output_dir, csv_file, file_type, file_size)
+  cmdstr = CommandLine.new
+  cmdstr.file_type = file_type.text if file_type.text.size > 0
+  cmdstr.file_size = file_size.value if file_size.value > 0.0
+  cmdstr.csv_file = csv_file.filename if csv_file.filename and csv_file.filename.size > 0
+  cmdstr.output_dir = output_dir.filename if output_dir.filename and output_dir.filename.size > 0
+  cmdstr.getCommand
 end
+
 window = Gtk::Window.new(Gtk::Window::TOPLEVEL)
-window.set_title  "File Chooser Buttons"
+window.set_title  "DrQueue任务报表生成工具"
 window.border_width = 10
 window.signal_connect('delete_event') { Gtk.main_quit }
 
-label = Gtk::Label.new
-chooser_dir  = Gtk::FileChooserButton.new(
-    "Choose a Folder", Gtk::FileChooser::ACTION_SELECT_FOLDER)
-chooser_file = Gtk::FileChooserButton.new(
-    "Choose a File", Gtk::FileChooser::ACTION_OPEN)
+label_dir = Gtk::Label.new
+label_dir.text = '任务输出目录'
+label_dir.set_alignment(1, 0)
+label_file = Gtk::Label.new
+label_file.text = '任务列表文件（CSV）'
+label_file.set_alignment(1, 0)
+label_cmd = Gtk::Label.new
+label_cmd.text = CMD_TEMPLATE
+label_file_type = Gtk::Label.new
+label_file_type.text = '渲染输出文件类型（后缀名，如png,jpeg,tiff等）'
+label_file_type.set_alignment(1, 0)
+label_file_size = Gtk::Label.new
+label_file_size.text = '渲染输出文件大小（小于该数值将被认为该祯失败）'
+label_file_size.set_alignment(1, 0)
 
+entry_file_type = Gtk::Entry.new
+entry_file_type.text = 'png'
+float = Gtk::Adjustment.new(1.0, 0.1, 1024.0, 1.0, 10.0, 10.0) # value, min, max, step, pg-incr pg-size
+adjustment_file_size = Gtk::SpinButton.new(float, 1.0, 1)
+
+chooser_dir  = Gtk::FileChooserButton.new(
+    "选择文件夹", Gtk::FileChooser::ACTION_SELECT_FOLDER)
+chooser_file = Gtk::FileChooserButton.new(
+    "选择文件", Gtk::FileChooser::ACTION_OPEN)
+
+button_test = Gtk::Button.new('打印命令行')
+button_run = Gtk::Button.new('开始执行！')
+button_test.signal_connect('clicked') {
+  label_cmd.text = get_cmdstr(chooser_dir, chooser_file, entry_file_type, adjustment_file_size)
+}
+button_run.signal_connect('clicked') {
+  puts get_cmdstr(chooser_dir, chooser_file, entry_file_type, adjustment_file_size)
+}
 ### IGNORE THIS I HAD TO PUT THIS IN SO THE CODE WOULD WORK AND MY INPUT WOULD NOT BE SPAM!!!
 ### THE OLNY REASON THIS IS IN HERE IS BECAUSE THE CODE WOULD FAIL BECAUSE ABOVE AN 'r' WAS MISSING
 ### IT WAS chooser_file = Gtk::FileChooserButton.new("Choose a File", Gtk::FileChooser::ACTION_OPEN)
 
 # Let's add an extra widget (a button) to the {{ dialog }}
+=begin
 extra_button = Gtk::Button.new("Extra button")
 extra_button.signal_connect("clicked") do
   puts "extra button is clicked"
 end
+
 chooser_dir.signal_connect('selection_changed') do |w|
   # {{ w }} = {{ FileChooserDialog }}
-  w.extra_widget = extra_button
-  folder_changed(w, chooser_file)
+  #w.extra_widget = extra_button
+  folder_changed(w, label_cmd)
+  #folder_changed(w, chooser_file)
 end
+
 chooser_file.signal_connect('selection_changed') do |w|
-  file_changed(chooser_file, label)
+  file_changed(w, label_cmd)
 end
+
+adjustment_file_size.signal_connect('value_changed') do |w|
+  size_changed(w, label_cmd)
+end
+
+=end 
+
 chooser_dir.current_folder  = GLib.home_dir
-# chooser_file.current_folder = "/tmp"  # <--- will have no effect, since callback overrides it 
+# chooser_file.current_dir = "/tmp"  # <--- will have no effect, since callback overrides it 
 # chooser_file.filename = "/home/iwk/wk/a_cfile.c" # <--- would work if file existed
 
 filter1 = Gtk::FileFilter.new
 filter2 = Gtk::FileFilter.new
 
-filter1.name = "Image Files"
+filter1.name = "CSV Files"
 filter2.name = "All Files"
 
-filter1.add_pattern('*.png')
-filter1.add_pattern('*.jpg')
-filter1.add_pattern('*.gif')
-filter2.add_pattern('*')
+filter1.add_pattern('*.csv')
+#filter2.add_pattern('*')
 
 chooser_file.add_filter(filter1)
-chooser_file.add_filter(filter2)
+#chooser_file.add_filter(filter2)
 
-vbox = Gtk::VBox.new(true, 5)
-vbox.pack_start_defaults(chooser_dir)
-vbox.pack_start_defaults(chooser_file)
-vbox.pack_start_defaults(label)
 
-window.add(vbox)
+vbox_labels = Gtk::VBox.new(true, 5)
+vbox_entries = Gtk::VBox.new(true, 5)
+hbox_top = Gtk::HBox.new(true, 5)
+hbox_bottom = Gtk::HBox.new(true, 5)
+vbox_global = Gtk::VBox.new
+
+vbox_labels.pack_start_defaults(label_dir)
+vbox_entries.pack_start_defaults(chooser_dir)
+vbox_labels.pack_start_defaults(label_file)
+vbox_entries.pack_start_defaults(chooser_file)
+vbox_labels.pack_start_defaults(label_file_type)
+vbox_entries.pack_start_defaults(entry_file_type)
+vbox_labels.pack_start_defaults(label_file_size)
+vbox_entries.pack_start_defaults(adjustment_file_size)
+
+hbox_top.pack_start_defaults(vbox_labels)
+hbox_top.pack_start_defaults(vbox_entries)
+hbox_bottom.pack_start_defaults(button_test)
+hbox_bottom.pack_start_defaults(button_run)
+
+vbox_global.pack_start(hbox_top)
+vbox_global.pack_start(hbox_bottom)
+vbox_global.pack_start(label_cmd)
+
+window.add(vbox_global)
 window.show_all
 Gtk.main
