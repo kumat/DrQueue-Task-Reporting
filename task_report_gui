@@ -3,6 +3,13 @@ require 'gtk2'
 
 CMD_TEMPLATE = 'task_report2 -o <output_dir> -t <file_type> -s <file_size> <csv_file>'
 
+class RenderResultItem
+  attr_accessor :scene_name, :result, :failed_frames
+  def initialize(s, r, f)
+    @scene_name, @result, @failed_frames = s, r, f
+  end
+end
+
 class CommandLine
   attr_accessor :output_dir, :csv_file, :file_type, :file_size
 
@@ -25,6 +32,28 @@ def get_cmdstr(output_dir, csv_file, file_type, file_size)
   cmdstr.csv_file = csv_file.filename if csv_file.filename and csv_file.filename.size > 0
   cmdstr.output_dir = output_dir.filename if output_dir.filename and output_dir.filename.size > 0
   cmdstr.getCommand
+end
+
+def verify_cmd(cmdstr)
+  not cmdstr.include? '<' or cmdstr.include? '>'
+end
+
+def get_cmd_output(cmdstr)
+  return 'ERROR: failed verifying the command to be executed.' if not verify_cmd(cmdstr)
+  IO.popen(cmdstr, 'r').read
+end
+
+def setup_tree_view(treeview)
+  renderer = Gtk::CellRendererText.new
+  column = Gtk::TreeViewColumn.new('场景', renderer, 'text' => 0)
+  treeview.append_column(column)
+  renderer = Gtk::CellRendererText.new
+  column = Gtk::TreeViewColumn.new('验证结果', renderer, 'text' => 1)
+  treeview.append_column(column)
+  renderer = Gtk::CellRendererText.new
+  renderer.editable = true
+  column = Gtk::TreeViewColumn.new('失败祯', renderer, 'text' => 2)
+  treeview.append_column(column)
 end
 
 window = Gtk::Window.new(Gtk::Window::TOPLEVEL)
@@ -52,6 +81,31 @@ entry_file_type.text = 'png'
 float = Gtk::Adjustment.new(1.0, 0.1, 1024.0, 1.0, 10.0, 10.0) # value, min, max, step, pg-incr pg-size
 adjustment_file_size = Gtk::SpinButton.new(float, 1.0, 1)
 
+list = Array.new
+list[0] = RenderResultItem.new('test1.mb', 'success', '')
+list[1] = RenderResultItem.new('test2.mb', 'success', '')
+list[2] = RenderResultItem.new('test3.mb', 'success', '')
+list[3] = RenderResultItem.new('test4.mb', 'failed', '1,2,4,7')
+list[4] = RenderResultItem.new('test5.mb', 'success', '')
+
+treeview = Gtk::TreeView.new
+setup_tree_view(treeview)
+store = Gtk::ListStore.new(String, String, String)
+list.each do |item|
+  iter = store.append
+  store.set_value(iter, 0, item.scene_name)
+  store.set_value(iter, 1, item.result)
+  store.set_value(iter, 2, item.failed_frames)
+end
+
+#treeview.model = store
+
+scrolled_win = Gtk::ScrolledWindow.new
+scrolled_win.set_size_request(300, 400)
+scrolled_win.add(treeview)
+scrolled_win.set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_AUTOMATIC)
+
+
 chooser_dir  = Gtk::FileChooserButton.new(
     "选择文件夹", Gtk::FileChooser::ACTION_SELECT_FOLDER)
 chooser_file = Gtk::FileChooserButton.new(
@@ -65,33 +119,6 @@ button_test.signal_connect('clicked') {
 button_run.signal_connect('clicked') {
   puts get_cmdstr(chooser_dir, chooser_file, entry_file_type, adjustment_file_size)
 }
-### IGNORE THIS I HAD TO PUT THIS IN SO THE CODE WOULD WORK AND MY INPUT WOULD NOT BE SPAM!!!
-### THE OLNY REASON THIS IS IN HERE IS BECAUSE THE CODE WOULD FAIL BECAUSE ABOVE AN 'r' WAS MISSING
-### IT WAS chooser_file = Gtk::FileChooserButton.new("Choose a File", Gtk::FileChooser::ACTION_OPEN)
-
-# Let's add an extra widget (a button) to the {{ dialog }}
-=begin
-extra_button = Gtk::Button.new("Extra button")
-extra_button.signal_connect("clicked") do
-  puts "extra button is clicked"
-end
-
-chooser_dir.signal_connect('selection_changed') do |w|
-  # {{ w }} = {{ FileChooserDialog }}
-  #w.extra_widget = extra_button
-  folder_changed(w, label_cmd)
-  #folder_changed(w, chooser_file)
-end
-
-chooser_file.signal_connect('selection_changed') do |w|
-  file_changed(w, label_cmd)
-end
-
-adjustment_file_size.signal_connect('value_changed') do |w|
-  size_changed(w, label_cmd)
-end
-
-=end 
 
 chooser_dir.current_folder  = GLib.home_dir
 # chooser_file.current_dir = "/tmp"  # <--- will have no effect, since callback overrides it 
@@ -133,6 +160,7 @@ hbox_bottom.pack_start_defaults(button_run)
 vbox_global.pack_start(hbox_top)
 vbox_global.pack_start(hbox_bottom)
 vbox_global.pack_start(label_cmd)
+vbox_global.pack_start(scrolled_win)
 
 window.add(vbox_global)
 window.show_all
