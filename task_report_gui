@@ -3,10 +3,26 @@ require 'gtk2'
 
 CMD_TEMPLATE = 'task_report2 -o <output_dir> -t <file_type> -s <file_size> <csv_file>'
 
+# /data/output/luan/yy08_sc01_084_001_an/bg: 148 files verified in total with Failure! Expected 150, but actual matched 148. Failed frames: 62, 126
+# /data/output/luan/yy08_sc01_085a_001_an/occ: 75 files verified in total with Success!
+
+def get_data_columns(line)
+  verified = expected = matched = 0
+  scene_name = failed_frames = ''
+  if line.include? 'Success!' and line =~ /(\d+) files/
+    verified = expected = matched = $1.to_i
+    scene_name = line.split(':')[0]
+  elsif line.include? 'Failure!' and line =~ /(\d+) files .+ Expected (\d+), .+ matched (\d+)\. Failed frames\: (.+)/
+    verified, expected, matched, failed_frames = $1.to_i, $2.to_i, $3.to_i, $4
+    scene_name = line.split(':')[0]
+  end
+  return scene_name, verified, expected, matched, failed_frames
+end
+
 class RenderResultItem
-  attr_accessor :scene_name, :result, :failed_frames
-  def initialize(s, r, f)
-    @scene_name, @result, @failed_frames = s, r, f
+  attr_accessor :scene_name, :verified, :expected, :matched, :failed_frames
+  def initialize(s, v, e, m, f)
+    @scene_name, @verified, @expected, @matched, @failed_frames = s, v, e, m, f
   end
 end
 
@@ -35,25 +51,48 @@ def get_cmdstr(output_dir, csv_file, file_type, file_size)
 end
 
 def verify_cmd(cmdstr)
-  not cmdstr.include? '<' or cmdstr.include? '>'
+  puts 'Verifying ' + cmdstr + '...'
+  return (not (cmdstr.include? '<' or cmdstr.include? '>'))
 end
 
 def get_cmd_output(cmdstr)
   return 'ERROR: failed verifying the command to be executed.' if not verify_cmd(cmdstr)
-  IO.popen(cmdstr, 'r').read
+  puts 'Running ' + cmdstr + '...'
+  list = Array.new
+  IO.popen(cmdstr, 'r').readlines.each do |line|
+    scene_name, verified, expected, matched, failed_frames = get_data_columns(line)
+    list << RenderResultItem.new(scene_name, verified, expected, matched, failed_frames) if verified > 0
+  end
+  return list
 end
 
 def setup_tree_view(treeview)
   renderer = Gtk::CellRendererText.new
-  column = Gtk::TreeViewColumn.new('场景', renderer, 'text' => 0)
+  column = Gtk::TreeViewColumn.new('场景输出', renderer, 'text' => 0)
   treeview.append_column(column)
   renderer = Gtk::CellRendererText.new
-  column = Gtk::TreeViewColumn.new('验证结果', renderer, 'text' => 1)
+  column = Gtk::TreeViewColumn.new('总验证数量', renderer, 'text' => 1)
+  treeview.append_column(column)
+  renderer = Gtk::CellRendererText.new
+  column = Gtk::TreeViewColumn.new('期望数量', renderer, 'text' => 1)
+  treeview.append_column(column)
+  renderer = Gtk::CellRendererText.new
+  column = Gtk::TreeViewColumn.new('合格数量', renderer, 'text' => 1)
   treeview.append_column(column)
   renderer = Gtk::CellRendererText.new
   renderer.editable = true
   column = Gtk::TreeViewColumn.new('失败祯', renderer, 'text' => 2)
   treeview.append_column(column)
+end
+
+def error_message(parent_window, message)
+  dialog = Gtk::MessageDialog.new(parent_window,
+				  Gtk::Dialog::DESTROY_WITH_PARENT,
+				  Gtk::MessageDialog::ERROR,
+				  Gtk::MessageDialog::BUTTONS_CLOSE,
+				  message)
+  dialog.run
+  dialog.destroy
 end
 
 # Create Window
@@ -67,14 +106,14 @@ label_dir = Gtk::Label.new
 label_dir.text = '任务输出目录'
 label_dir.set_alignment(1, 0)
 chooser_dir  = Gtk::FileChooserButton.new("选择文件夹", Gtk::FileChooser::ACTION_SELECT_FOLDER)
-chooser_dir.current_folder  = GLib.home_dir
+chooser_dir.current_folder  = '/data/output'#GLib.home_dir
 
 # Create Label and FileChooserButton for Task List CSV File
 label_file = Gtk::Label.new
 label_file.text = '任务列表文件（CSV）'
 label_file.set_alignment(1, 0)
 chooser_file = Gtk::FileChooserButton.new("选择文件", Gtk::FileChooser::ACTION_OPEN)
-# chooser_file.current_folder = "/tmp" 
+chooser_file.current_folder = "/data/input" 
 # chooser_file.filename = "/home/iwk/wk/a_cfile.c" # <--- would work if file existed
 filter = Gtk::FileFilter.new
 filter.name = "CSV Files"
@@ -104,20 +143,6 @@ treeview = Gtk::TreeView.new
 setup_tree_view(treeview)
 store = Gtk::ListStore.new(String, String, String)
 
-list = Array.new
-list[0] = RenderResultItem.new('test1.mb', 'success', '')
-list[1] = RenderResultItem.new('test2.mb', 'success', '')
-list[2] = RenderResultItem.new('test3.mb', 'success', '')
-list[3] = RenderResultItem.new('test4.mb', 'failed', '1,2,4,7')
-list[4] = RenderResultItem.new('test5.mb', 'success', '')
-
-list.each do |item|
-  iter = store.append
-  store.set_value(iter, 0, item.scene_name)
-  store.set_value(iter, 1, item.result)
-  store.set_value(iter, 2, item.failed_frames)
-end
-
 #treeview.model = store
 
 # Create ScrolledWindow as container for TreeView
@@ -127,14 +152,30 @@ scrolled_win.add(treeview)
 scrolled_win.set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_AUTOMATIC)
 
 # Create Buttons
-button_test = Gtk::Button.new('打印命令行')
+button_test = Gtk::Button.new('预览命令')
 button_test.signal_connect('clicked') {
   label_cmd.text = get_cmdstr(chooser_dir, chooser_file, entry_file_type, adjustment_file_size)
 }
 
-button_run = Gtk::Button.new('开始执行！')
+button_run = Gtk::Button.new('执行命令')
 button_run.signal_connect('clicked') {
-  puts get_cmdstr(chooser_dir, chooser_file, entry_file_type, adjustment_file_size)
+  output = get_cmd_output(get_cmdstr(chooser_dir, chooser_file, entry_file_type, adjustment_file_size))
+  if output.is_a? String and output.include? 'ERROR'
+    error_message(window, output)
+  elsif output.is_a? Array
+    store = Gtk::ListStore.new(String, Integer, Integer, Integer, String)
+    output.each do |item|
+      iter = store.append
+      store.set_value(iter, 0, item.scene_name)
+      store.set_value(iter, 1, item.verified)
+      store.set_value(iter, 2, item.expected)
+      store.set_value(iter, 3, item.matched)
+      store.set_value(iter, 4, item.failed_frames)
+    end
+    
+    treeview.model = store
+    #update_treeview(treeview)
+  end
 }
 
 
