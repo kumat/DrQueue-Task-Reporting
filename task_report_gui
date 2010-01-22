@@ -56,30 +56,53 @@ def setup_tree_view(treeview)
   treeview.append_column(column)
 end
 
+# Create Window
 window = Gtk::Window.new(Gtk::Window::TOPLEVEL)
 window.set_title  "DrQueue任务报表生成工具"
 window.border_width = 10
 window.signal_connect('delete_event') { Gtk.main_quit }
 
+# Create Label and FileChooserButton for Task Output Dir 
 label_dir = Gtk::Label.new
 label_dir.text = '任务输出目录'
 label_dir.set_alignment(1, 0)
+chooser_dir  = Gtk::FileChooserButton.new("选择文件夹", Gtk::FileChooser::ACTION_SELECT_FOLDER)
+chooser_dir.current_folder  = GLib.home_dir
+
+# Create Label and FileChooserButton for Task List CSV File
 label_file = Gtk::Label.new
 label_file.text = '任务列表文件（CSV）'
 label_file.set_alignment(1, 0)
-label_cmd = Gtk::Label.new
-label_cmd.text = CMD_TEMPLATE
+chooser_file = Gtk::FileChooserButton.new("选择文件", Gtk::FileChooser::ACTION_OPEN)
+# chooser_file.current_folder = "/tmp" 
+# chooser_file.filename = "/home/iwk/wk/a_cfile.c" # <--- would work if file existed
+filter = Gtk::FileFilter.new
+filter.name = "CSV Files"
+filter.add_pattern('*.csv')
+chooser_file.add_filter(filter)
+
+# Create Label and Text Entry for Task Output File Type
 label_file_type = Gtk::Label.new
 label_file_type.text = '渲染输出文件类型（后缀名，如png,jpeg,tiff等）'
 label_file_type.set_alignment(1, 0)
+entry_file_type = Gtk::Entry.new
+entry_file_type.text = 'png'
+
+# Create Label and SpinButton for Task Output File Size
 label_file_size = Gtk::Label.new
 label_file_size.text = '渲染输出文件大小（小于该数值将被认为该祯失败）'
 label_file_size.set_alignment(1, 0)
-
-entry_file_type = Gtk::Entry.new
-entry_file_type.text = 'png'
 float = Gtk::Adjustment.new(1.0, 0.1, 1024.0, 1.0, 10.0, 10.0) # value, min, max, step, pg-incr pg-size
 adjustment_file_size = Gtk::SpinButton.new(float, 1.0, 1)
+
+# Create Label for Command String(Preview)
+label_cmd = Gtk::Label.new
+label_cmd.text = CMD_TEMPLATE
+
+# Create TreeView for verification result
+treeview = Gtk::TreeView.new
+setup_tree_view(treeview)
+store = Gtk::ListStore.new(String, String, String)
 
 list = Array.new
 list[0] = RenderResultItem.new('test1.mb', 'success', '')
@@ -88,9 +111,6 @@ list[2] = RenderResultItem.new('test3.mb', 'success', '')
 list[3] = RenderResultItem.new('test4.mb', 'failed', '1,2,4,7')
 list[4] = RenderResultItem.new('test5.mb', 'success', '')
 
-treeview = Gtk::TreeView.new
-setup_tree_view(treeview)
-store = Gtk::ListStore.new(String, String, String)
 list.each do |item|
   iter = store.append
   store.set_value(iter, 0, item.scene_name)
@@ -100,43 +120,25 @@ end
 
 #treeview.model = store
 
+# Create ScrolledWindow as container for TreeView
 scrolled_win = Gtk::ScrolledWindow.new
 scrolled_win.set_size_request(300, 400)
 scrolled_win.add(treeview)
 scrolled_win.set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_AUTOMATIC)
 
-
-chooser_dir  = Gtk::FileChooserButton.new(
-    "选择文件夹", Gtk::FileChooser::ACTION_SELECT_FOLDER)
-chooser_file = Gtk::FileChooserButton.new(
-    "选择文件", Gtk::FileChooser::ACTION_OPEN)
-
+# Create Buttons
 button_test = Gtk::Button.new('打印命令行')
-button_run = Gtk::Button.new('开始执行！')
 button_test.signal_connect('clicked') {
   label_cmd.text = get_cmdstr(chooser_dir, chooser_file, entry_file_type, adjustment_file_size)
 }
+
+button_run = Gtk::Button.new('开始执行！')
 button_run.signal_connect('clicked') {
   puts get_cmdstr(chooser_dir, chooser_file, entry_file_type, adjustment_file_size)
 }
 
-chooser_dir.current_folder  = GLib.home_dir
-# chooser_file.current_dir = "/tmp"  # <--- will have no effect, since callback overrides it 
-# chooser_file.filename = "/home/iwk/wk/a_cfile.c" # <--- would work if file existed
 
-filter1 = Gtk::FileFilter.new
-filter2 = Gtk::FileFilter.new
-
-filter1.name = "CSV Files"
-filter2.name = "All Files"
-
-filter1.add_pattern('*.csv')
-#filter2.add_pattern('*')
-
-chooser_file.add_filter(filter1)
-#chooser_file.add_filter(filter2)
-
-
+# Constructing Window Layout
 vbox_labels = Gtk::VBox.new(true, 5)
 vbox_entries = Gtk::VBox.new(true, 5)
 hbox_top = Gtk::HBox.new(true, 5)
@@ -163,5 +165,7 @@ vbox_global.pack_start(label_cmd)
 vbox_global.pack_start(scrolled_win)
 
 window.add(vbox_global)
+
 window.show_all
+# Start main loop
 Gtk.main
