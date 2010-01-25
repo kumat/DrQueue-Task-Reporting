@@ -193,7 +193,8 @@ ARGV.each do |csv_file|
 
   tasks.keys.each do |key|
     tasks[key].keys.each do |layer|
-      puts "#{key}/#{layer}"
+      expected_frames = tasks[key][layer][:last_frame].size > 0 ? tasks[key][layer][:last_frame].to_i - tasks[key][layer][:first_frame].to_i + 1 : 0
+      puts "#{key}/#{layer}:#{expected_frames}" if expected_frames > 0
     end
   end
 
