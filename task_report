@@ -125,7 +125,7 @@ ARGV.each do |csv_file|
       begin
         STDERR.puts "Processing: #{line}" if options[:verbose]
         a = line.strip.split(',')
-        if a[mb_filename_csv_col].size > 0 and a[last_frame_csv_col].to_i > 0
+        if a[mb_filename_csv_col] and a[last_frame_csv_col] and a[mb_filename_csv_col].size > 0 and a[last_frame_csv_col].to_i > 0
           fn = a[mb_filename_csv_col].split('.')
           if fn[fn.size - 1] == 'mb'
             index = a[mb_filename_csv_col].gsub(/\.mb$/, '')
