@@ -16,10 +16,25 @@ def verbose_print(message)
   print message if VERBOSE_MODE
 end
 
+def image_type(file)
+  head = IO.read(file, 10) 
+  return 'Error occurred when trying to get the head of file: %s' % file if head == nil or head.size != 10
+  case head
+    when /^GIF8/: 'gif'
+    when /^\x89PNG/: 'png'
+    when /^\xff\xd8\xff\xe0(.){2}JFIF/: 'jpeg, jpg'
+    when /^\xff\xd8\xff\xe1(.*){2}Exif/: 'jpeg, jpg'
+    when /^\x49\x49\x2a/: 'tiff'
+    when /^\x42\x4d/: 'bmp'
+  else
+    'Cannot determine the header: %2x %2x %2x %2x %2x %2x %2x %2x %2x %2x' % head.each_byte.collect
+  end 
+end
+
 src_path = ARGV[ARGV.size - 5]
 verbose_print "Source Path: #{src_path}"
 
-file_type = ARGV[ARGV.size - 4].upcase
+file_type = ARGV[ARGV.size - 4].downcase
 minimal_size = ARGV[ARGV.size - 3].to_i
 first_frame = ARGV[ARGV.size - 2].to_i
 last_frame = ARGV[ARGV.size - 1].to_i
@@ -52,18 +67,15 @@ Dir.entries(src_path).each do |f|
   verbose_print "Verifying #{src_file}..."
   begin
     if File.file? src_file
-      verbose_print "is a..."
-      IO.popen("file \"#{src_file}\"", "r") do |p|
-        buf = p.read
-        verbose_print "#{buf.strip}\n"
-        if buf.include? "#{file_type}" and File.size(src_file) >= minimal_size
-          count += 1
-          verbose_print "matched!\n"
-          a = f.split('.')
-          frame_set.delete a[ a.size - 2 ].to_i
-        else
-          verbose_print "skipped.\n"
-        end
+      determined = image_type(src_file)
+      verbose_print "File Type detected: %s, " % determined
+      if determined.include? file_type and File.size(src_file) >= minimal_size
+        count += 1
+        verbose_print "matched!\n"
+        a = f.split('.')
+        frame_set.delete a[ a.size - 2 ].to_i
+      else
+        verbose_print "skipped.\n"
       end
     else
       verbose_print "is not a file, skipped.\n"

@@ -95,19 +95,24 @@ end
 def setup_tree_view(treeview)
   renderer = Gtk::CellRendererText.new
   column = Gtk::TreeViewColumn.new('场景输出', renderer, 'text' => 0)
+  column.sort_column_id = 0
   treeview.append_column(column)
   renderer = Gtk::CellRendererText.new
   column = Gtk::TreeViewColumn.new('总验证数量', renderer, 'text' => 1)
+  column.sort_column_id = 1
   treeview.append_column(column)
   renderer = Gtk::CellRendererText.new
   column = Gtk::TreeViewColumn.new('期望数量', renderer, 'text' => 2)
+  column.sort_column_id = 2
   treeview.append_column(column)
   renderer = Gtk::CellRendererText.new
   column = Gtk::TreeViewColumn.new('合格数量', renderer, 'text' => 3)
+  column.sort_column_id = 3
   treeview.append_column(column)
   renderer = Gtk::CellRendererText.new
   renderer.editable = true
   column = Gtk::TreeViewColumn.new('失败祯', renderer, 'text' => 4)
+  column.sort_column_id = 4
   treeview.append_column(column)
 end
 
@@ -167,9 +172,6 @@ label_cmd.text = CMD_TEMPLATE
 # Create TreeView for verification result
 treeview = Gtk::TreeView.new
 setup_tree_view(treeview)
-store = Gtk::ListStore.new(String, String, String)
-
-#treeview.model = store
 
 # Create ScrolledWindow as container for TreeView
 scrolled_win = Gtk::ScrolledWindow.new
@@ -190,26 +192,6 @@ button_run.signal_connect('clicked') {
     error_message(window, "ERROR: Invalid command!")
   else
     generate_treeview_from_cmd_output(treeview, cmdstr)
-    
-=begin
-    Thread.new do
-      list = Array.new
-      IO.popen(cmdstr, 'r').each do |line|
-        scene_name, verified, expected, matched, failed_frames = get_data_columns(line)
-        list << RenderResultItem.new(scene_name, verified, expected, matched, failed_frames) if verified > 0
-        store = Gtk::ListStore.new(String, Integer, Integer, Integer, String)
-        list.each do |item|
-          iter = store.append
-          store.set_value(iter, 0, item.scene_name)
-          store.set_value(iter, 1, item.verified)
-          store.set_value(iter, 2, item.expected)
-          store.set_value(iter, 3, item.matched)
-          store.set_value(iter, 4, item.failed_frames)
-        end
-        treeview.model = store
-      end
-    end
-=end
   end
 }
 
